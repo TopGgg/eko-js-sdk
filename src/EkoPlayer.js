@@ -3,7 +3,7 @@ import deepmerge from 'deepmerge';
 import EventEmitter from 'eventemitter3';
 
 import utils from './utils/utils';
-
+const CSP_INTERVAL_TIME = 200;
 const DEFAULT_OPTIONS = {
     env: '',
     frameTitle: 'Eko Player',
@@ -184,10 +184,31 @@ class EkoPlayer {
         }
 
         // Finally, let's set the iframe's src to begin loading the project
+        const embedUrl = utils.buildEmbedUrl(projectId, embedParams, options.env);
         this._iframe.setAttribute(
             'src',
-            utils.buildEmbedUrl(projectId, embedParams, options.env)
+            embedUrl
         );
+
+        if (options.params.csp) {
+            const params = { test: 'test' };
+
+            // This function Sends the client side params to the loader via post message.
+            const sendCspToLoader = () => {
+                this._iframe.contentWindow.postMessage({ target: 'loader', params }, '*');
+            };
+
+            // Since we don't know when the loader starts listening to the csp message, we send it in a const interval till we receive an 'ack' message.
+            const intervalId = setInterval(sendCspToLoader, CSP_INTERVAL_TIME);
+
+            // When ack messgae has received we clear the message sending interval.
+            window.addEventListener('message', (event) => {
+                const isCspAck = event.data && event.data.target === 'sdk' && event.data.type === 'csp.accept';
+                if (isCspAck) {
+                    clearInterval(intervalId);
+                }
+            });
+        }
     }
 
     /**
